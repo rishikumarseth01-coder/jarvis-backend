@@ -1,0 +1,6 @@
+# jarvis-backendfastapi
+uvicorn
+groq
+pillow
+duckduckgo_search
+pydantic
