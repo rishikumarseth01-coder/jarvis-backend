@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>JARVIS Mobile HUD</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+  
+  :root {
+    --cyan: #4fe8ff;
+    --cyan-dim: rgba(79, 232, 255, 0.25);
+    --cyan-glow: rgba(79, 232, 255, 0.6);
+    --border-color: rgba(79, 232, 255, 0.4);
+    --bg-dark: #020a12;
+    --red-glow: rgba(255, 45, 85, 0.8);
+    --red-core: #ff2a55;
+    --green-glow: #00e676;
+  }
+
+  body {
+    background: var(--bg-dark);
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Consolas', monospace;
+    color: var(--cyan);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .hud-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, rgba(10, 32, 45, 0.8) 0%, rgba(1, 6, 12, 0.98) 90%);
+    overflow: hidden;
+  }
+
+  .top-header {
+    position: absolute;
+    top: 28px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    z-index: 20;
+  }
+
+  .title {
+    font-size: 24px;
+    letter-spacing: 9px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 12px var(--cyan);
+  }
+
+  .subtitle {
+    font-size: 8.5px;
+    letter-spacing: 2px;
+    color: var(--cyan-glow);
+    margin-top: 4px;
+  }
+
+  #terminal-logs {
+    position: absolute;
+    top: 80px;
+    left: 5%;
+    width: 90%;
+    height: 75px;
+    background: rgba(1, 10, 18, 0.75);
+    border: 1px solid rgba(79, 232, 255, 0.25);
+    border-radius: 6px;
+    padding: 6px 8px;
+    overflow-y: auto;
+    font-size: 9.5px;
+    line-height: 14px;
+    color: #8ba8b7;
+    z-index: 15;
+  }
+
+  .log-line.agent { color: var(--green-glow); }
+  .log-line.user { color: #fff; }
+
+  .center-hud {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 290px;
+    height: 290px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .hud-svg-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .spin-cw { animation: spinClockwise 28s linear infinite; transform-origin: center; }
+  .spin-ccw { animation: spinCounterClockwise 20s linear infinite; transform-origin: center; }
+
+  @keyframes spinClockwise { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes spinCounterClockwise { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+
+  .hud-core {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(79, 232, 255, 0.15) 0%, rgba(2, 10, 18, 0.95) 75%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 20px rgba(79, 232, 255, 0.3), 0 0 25px rgba(79, 232, 255, 0.25);
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+
+  .hud-core.listening {
+    background: radial-gradient(circle, rgba(255, 42, 85, 0.35) 0%, rgba(20, 2, 8, 0.96) 80%) !important;
+    box-shadow: inset 0 0 35px var(--red-glow), 0 0 35px var(--red-glow) !important;
+    border: 2px solid #ff2a55 !important;
+  }
+
+  .hud-core.speaking {
+    border: 2px solid var(--green-glow);
+    box-shadow: 0 0 25px rgba(0, 230, 118, 0.4);
+  }
+
+  .core-state { font-size: 8px; letter-spacing: 2px; color: #8ba8b7; }
+  .core-main-val { font-size: 20px; font-weight: bold; color: #fff; text-shadow: 0 0 8px var(--cyan); }
+
+  .search-dock-container {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 92%;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-indicator {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: #8ba8b7;
+    text-transform: uppercase;
+  }
+
+  .search-dock {
+    width: 100%;
+    height: 48px;
+    background: rgba(3, 14, 26, 0.92);
+    border: 1px solid rgba(79, 232, 255, 0.4);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .dock-btn {
+    background: rgba(79, 232, 255, 0.1);
+    border: 1px solid rgba(79, 232, 255, 0.3);
+    color: var(--cyan);
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .dock-btn.active {
+    background: rgba(255, 45, 85, 0.4);
+    border-color: #ff2d55;
+    color: #fff;
+  }
+
+  .search-input {
+    flex: 1;
+    height: 36px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  
+  <div class="top-header">
+  <div class="title" onclick="changeServerURL()" style="cursor:pointer;" title="Tap to change server address">JARVIS ⚙️</div>
+  <div class="subtitle">AUTONOMOUS MOBILE CORE</div>
+</div>
+
+<div class="hud-container">
+  <div class="top-header">
+    <div class="title">JARVIS</div>
+    <div class="subtitle">AUTONOMOUS MOBILE CORE</div>
+  </div>
+
+  <div id="terminal-logs">
+    <div class="log-line">[SYSTEM]: Mobile Neural Core Active.</div>
+  </div>
+
+  <div class="center-hud">
+    <svg class="hud-svg-layer" viewBox="0 0 300 300">
+      <circle cx="150" cy="150" r="135" fill="none" stroke="rgba(79, 232, 255, 0.2)" stroke-width="1.5" stroke-dasharray="2 6"/>
+      <g class="spin-cw">
+        <circle id="ring1" cx="150" cy="150" r="118" fill="none" stroke="#4fe8ff" stroke-width="2.5" stroke-dasharray="80 30 40 40" stroke-linecap="round"/>
+      </g>
+      <g class="spin-ccw">
+        <circle id="ring2" cx="150" cy="150" r="98" fill="none" stroke="#4fe8ff" stroke-width="2.5" stroke-dasharray="15 10 40 10"/>
+      </g>
+      <g id="dynamicWaveform"></g>
+    </svg>
+
+    <div class="hud-core" id="reactorCore">
+      <div class="core-state" id="coreState">STANDBY</div>
+      <div class="core-main-val" id="coreVal">ONLINE</div>
+    </div>
+  </div>
+
+  <div class="search-dock-container">
+    <div class="status-indicator" id="dock-status">AI CONSOLE READY</div>
+    <div class="search-dock">
+      <button class="dock-btn" id="btn-coding" title="Coding Mode">★</button>
+      <button class="dock-btn" id="btn-cam" title="Vision Analysis">📷</button>
+      <button class="dock-btn" id="btn-mic" title="Voice Recognition">🎙️</button>
+      <input id="dock-input" class="search-input" placeholder="Command JARVIS..." autocomplete="off">
+      <button class="dock-btn" id="btn-send" style="color:var(--green-glow);">➔</button>
+    </div>
+    <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;">
+  </div>
+</div>
+
+<script>
+  // UPDATE: Ensure this IP and Port match your PC running server.py
+  // Loads saved server URL from phone storage, falls back to default
+let SERVER_URL = localStorage.getItem("jarvis_server_url") || "https://YOUR-URL.trycloudflare.com";
+
+function changeServerURL() {
+  const current = localStorage.getItem("jarvis_server_url") || SERVER_URL;
+  const newUrl = prompt("Enter new Cloudflare/Server URL:", current);
+  if (newUrl && newUrl.trim()) {
+    SERVER_URL = newUrl.trim().replace(/\/+$/, ""); // removes trailing slashes
+    localStorage.setItem("jarvis_server_url", SERVER_URL);
+    logToTerminal(`[SYSTEM]: Server updated to ${SERVER_URL}`);
+  }
+}
+  let isCodingMode = false;
+  let currentVisualState = 'STANDBY';
+  let activeImageBase64 = null;
+
+  function logToTerminal(msg, type = "sys") {
+    const term = document.getElementById('terminal-logs');
+    if (!term) return;
+    const line = document.createElement('div');
+    line.className = 'log-line ' + type;
+    line.innerText = msg;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function setHUDState(state) {
+    currentVisualState = state;
+    const core = document.getElementById('reactorCore');
+    const stateLabel = document.getElementById('coreState');
+    const valLabel = document.getElementById('coreVal');
+    const micBtn = document.getElementById('btn-mic');
+    const ring1 = document.getElementById('ring1');
+
+    stateLabel.innerText = state;
+    core.className = 'hud-core ' + state.toLowerCase();
+
+    if (state === 'LISTENING') {
+      valLabel.innerText = 'EARS ON';
+      micBtn.classList.add('active');
+      ring1.setAttribute('stroke', '#ff2a55');
+    } else if (state === 'THINKING') {
+      valLabel.innerText = 'REASONING';
+      micBtn.classList.remove('active');
+      ring1.setAttribute('stroke', '#ffb74d');
+    } else if (state === 'SPEAKING') {
+      valLabel.innerText = 'VOCAL';
+      micBtn.classList.remove('active');
+      ring1.setAttribute('stroke', '#00e676');
+    } else {
+      valLabel.innerText = 'ONLINE';
+      micBtn.classList.remove('active');
+      ring1.setAttribute('stroke', '#4fe8ff');
+    }
+  }
+
+  function speak(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    setHUDState('SPEAKING');
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.05;
+    utterance.pitch = 0.95;
+    utterance.onend = () => setHUDState('STANDBY');
+    utterance.onerror = () => setHUDState('STANDBY');
+    window.speechSynthesis.speak(utterance);
+  }
+
+  async function submitQuery(promptText) {
+    const text = promptText || document.getElementById('dock-input').value.trim();
+    if (!text && !activeImageBase64) return;
+
+    logToTerminal(`[USER]: ${text || "Visual diagnosis request"}`, 'user');
+    document.getElementById('dock-input').value = "";
+    setHUDState('THINKING');
+
+    try {
+      const response = await fetch(`${SERVER_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          coding_mode: isCodingMode,
+          image_base64: activeImageBase64
+        })
+      });
+      activeImageBase64 = null;
+      const data = await response.json();
+      logToTerminal(`[JARVIS]: ${data.reply}`, 'agent');
+      speak(data.reply);
+    } catch (err) {
+      logToTerminal(`[NET ERROR]: Cannot connect to ${SERVER_URL}`, 'sys');
+      setHUDState('STANDBY');
+    }
+  }
+
+  // --- Hybrid Voice Recognition (Capacitor Native Plugin with Web Speech Fallback) ---
+  async function triggerVoiceCapture() {
+    setHUDState('LISTENING');
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
+      try {
+        const { SpeechRecognition } = window.Capacitor.Plugins;
+        await SpeechRecognition.requestPermissions();
+        const res = await SpeechRecognition.start({
+          language: "en-US",
+          maxResults: 1,
+          prompt: "Say command...",
+          partialResults: false,
+          popup: false
+        });
+        if (res.matches && res.matches.length > 0) {
+          submitQuery(res.matches[0]);
+        }
+      } catch (err) {
+        setHUDState('STANDBY');
+      }
+      return;
+    }
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec) {
+      const rec = new SpeechRec();
+      rec.lang = 'en-US';
+      rec.onresult = (e) => submitQuery(e.results[0][0].transcript);
+      rec.onerror = () => setHUDState('STANDBY');
+      rec.onend = () => { if (currentVisualState === 'LISTENING') setHUDState('STANDBY'); };
+      rec.start();
+    } else {
+      alert("Voice STT not available in this WebView. Please use input bar.");
+      setHUDState('STANDBY');
+    }
+  }
+
+  // Camera & Image Diagnosis
+  document.getElementById('btn-cam').addEventListener('click', () => {
+    document.getElementById('camera-input').click();
+  });
+
+  document.getElementById('camera-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        activeImageBase64 = reader.result;
+        logToTerminal("[CAMERA]: Frame captured. Press ➔ or speak prompt.");
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  document.getElementById('btn-mic').addEventListener('click', triggerVoiceCapture);
+  document.getElementById('btn-send').addEventListener('click', () => submitQuery());
+  document.getElementById('dock-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitQuery();
+  });
+
+  document.getElementById('btn-coding').addEventListener('click', () => {
+    isCodingMode = !isCodingMode;
+    document.getElementById('btn-coding').classList.toggle('active', isCodingMode);
+    document.getElementById('dock-status').innerText = isCodingMode ? "CODING & DEBUG ACTIVE" : "AI CONSOLE READY";
+  });
+</script>
+</body>
+</html>
